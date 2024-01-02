@@ -1,21 +1,3 @@
-function get_input()
-    if love.keyboard.isDown('w') then
-        player.y = player.y - player.speed
-    end
-
-    if love.keyboard.isDown('s') then
-        player.y = player.y + player.speed
-    end
-
-    if love.keyboard.isDown('a') then
-        player.x = player.x - player.speed
-    end
-
-    if love.keyboard.isDown('d') then
-        player.x = player.x + player.speed
-    end
-end
-
 function readMapFile(filename)
     local mapArray = {}
 
@@ -39,10 +21,23 @@ function readMapFile(filename)
 end
 
 
+
 function love.load()
     love.window.setTitle("love2d test")
 
-    map = readMapFile("map.txt")
+    wf = require 'lib/windfield'
+    camera = require 'lib/camera'
+
+    world = wf.newWorld(0,0)
+
+    cam = camera()
+
+    env = {}
+    env.cell_width = 48
+    env.cell_height = 48
+    env.walls = {}
+
+    map = readMapFile("map1.txt")
     map_size_x = #map 
     map_size_y = #map[1] 
     --print(str(map_size_x)+ " "+str(map_size_y))
@@ -50,31 +45,77 @@ function love.load()
     player = {}
     player.x = 10
     player.y = 10
-    player.speed = 1
-    player.size = 64
+    player.speed = 200
+    player.size = 32
+    player.collision_shape = world:newRectangleCollider(0,0,player.size,player.size)
+    player.collision_shape:setFixedRotation(true)
 
-    world = {}
-
-    world.cell_width = 64
-    world.cell_height = 64
+    map_collision_reload = true
+    generate = true
 
 end
 
 
+
+function generate_world(x,y,seed,scale)
+    local file = io.open("map1.txt", "w")
+
+    for i=1, x, 1 do
+        for j=1, y, 1 do
+            local one = love.math.noise(i*scale,j*scale,seed)
+            file:write(tostring(math.ceil(one-1.5)))
+            file:write(";")
+        end
+        file:write("\n")
+    end
+    file:close()
+end
+
+function get_input()
+
+    local vx = 0
+    local vy = 0
+
+    if love.keyboard.isDown('w') then
+        vy = player.speed * -1
+    end
+
+    if love.keyboard.isDown('s') then
+        vy = player.speed * 1
+    end
+
+    if love.keyboard.isDown('a') then
+        vx = player.speed * -1
+    end
+
+    if love.keyboard.isDown('d') then
+        vx = player.speed * 1
+    end
+
+    player.collision_shape:setLinearVelocity(vx,vy)
+
+    player.x = player.collision_shape:getX() - player.size/2
+    player.y = player.collision_shape:getY() - player.size/2
+
+end
 
 
 function love.update(dt)
     get_input()
+    cam:lookAt(player.x, player.y)
+    world:update(dt)
 end
 
+function draw_map()
 
-function love.draw()
+    for y = 1,map_size_x,1 do 
+        for x = 1,map_size_y,1 do 
+            love.graphics.setColor(1,0,1)
 
-    --draw world
-    --love.graphics.setColor(0.1,0.6,0.1)
-    for x = 1,map_size_x,1 do 
-        for y = 1,map_size_y,1 do 
-            love.graphics.setColor(0,0,1)
+            if map[y][x] == -1 then
+                love.graphics.setColor(0.08,0.42,0.9)
+            end
+
             if map[y][x] == 0 then
                 love.graphics.setColor(0.1,0.6,0.1)
             end
@@ -82,18 +123,45 @@ function love.draw()
             if map[y][x] == 1 then
                 love.graphics.setColor(0.6,0.1,0.1)
             end
-            love.graphics.rectangle("fill", world.cell_width*(x-1),world.cell_height*(y-1), world.cell_width,world.cell_height)
+            love.graphics.rectangle("fill", env.cell_width*(x-1),env.cell_height*(y-1), env.cell_width,env.cell_height)
         end
-    end
+    end 
+end
+
+function map_collision()
+
+    for x = 1,map_size_x,1 do 
+        for y = 1,map_size_y,1 do 
+            if map[y][x] == 1 then
+                local wall = world:newRectangleCollider(env.cell_width*(x-1),env.cell_height*(y-1), env.cell_width,env.cell_height)
+                wall:setType("static")
+                table.insert(env.walls,wall)
+            end
+        end
+    end 
+end
 
 
-    --draw player
-    love.graphics.setColor(0.7,0,0)
-    love.graphics.rectangle("fill", player.x, player.y, player.size, player.size)
+function love.draw()
+    cam:attach()
 
-    love.graphics.setColor(1,1,1)
-    --love.graphics.print("hello world")
-    --love.graphics.print(map)
-    --love.graphics.print(map[1][1])
+        draw_map()
+
+        if generate then
+            generate_world(64,64,99,0.05)
+            generate = false
+        end
+
+        if map_collision_reload then
+            map_collision()
+            map_collision_reload = false
+        end
+
+        --world:draw()
+        love.graphics.setColor(0.7,0,0)
+        love.graphics.rectangle("fill", player.x, player.y, player.size, player.size)
+        love.graphics.setColor(1,1,1)
+        love.graphics.print("hello world")
+    cam:detach()
 
 end
